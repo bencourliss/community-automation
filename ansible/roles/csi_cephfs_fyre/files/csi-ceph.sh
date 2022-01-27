@@ -24,19 +24,11 @@ if [[ $rookRelease != "master" ]]; then
   git checkout tags/$rookRelease -b release-$rook_branch_version
   cd ..
 fi
-# if rook-ceph is version 1.5, then need to create/apply crd
-majorRelease=$(echo ${rookRelease:0:4})
-if [[ $majorRelease != "v1.4" ]]
-then
-  echo "Doing crds.yaml"
-  oc create -f rook/cluster/examples/kubernetes/ceph/crds.yaml
-  echo "crds.yaml exit $?"
-else
-  echo "No reason to apply crds.yaml as file may not exist"
-fi
-echo "Doing common.yaml"
-oc create -f rook/cluster/examples/kubernetes/ceph/common.yaml
-echo "common.yaml exit $?"
+
+oc login -u system:admin
+
+# For Rook 1.8+ the examples live in a new directory
+oc create -f rook/deploy/examples/crds.yaml -f rook/deploy/examples/common.yaml
 
 echo "Setting up Docker registry image pull secrets"
 if [[ -z $registry ]]; then
@@ -54,7 +46,7 @@ fi
 echo "setup Docker registry image pull secrets exit"
 
 echo "Doing operator-openshift.yaml"
-oc create -f rook/cluster/examples/kubernetes/ceph/operator-openshift.yaml
+oc create -f rook/deploy/examples/operator-openshift.yaml
 echo "operator-openshift.yaml exit $?"
 sleep_count=30
 while [[ $sleep_count -gt 0 ]]; do
@@ -69,13 +61,13 @@ while [[ $sleep_count -gt 0 ]]; do
   fi
 done
 echo "Doing sed of useAllDevices false"
-sed -i 's/useAllDevices: true/useAllDevices: false/g' rook/cluster/examples/kubernetes/ceph/cluster.yaml
+sed -i 's/useAllDevices: true/useAllDevices: false/g' rook/deploy/examples/cluster.yaml
 echo "Exit from useAllDevice $?"
 echo "Doing sed of deviceFilter"
-sed -i "s/#deviceFilter:/deviceFilter: $device/g" rook/cluster/examples/kubernetes/ceph/cluster.yaml
+sed -i "s/#deviceFilter:/deviceFilter: $device/g" rook/deploy/examples/cluster.yaml
 echo "Exit from deviceFilter $?"
 echo "Doing cluster.yaml create"
-oc create -f rook/cluster/examples/kubernetes/ceph/cluster.yaml
+oc create -f rook/deploy/examples/cluster.yaml
 echo "Exit from cluster.yaml $?"
 
 num_worker_nodes=$(oc get no | tr -s ' ' | cut -f3 -d' ' | grep worker  | wc -l)
@@ -94,11 +86,11 @@ while [[ $ceph_sleep_count -ne 0 ]]; do
   fi
 done
 echo "Doing filessystem-test.yaml"
-oc create -f rook/cluster/examples/kubernetes/ceph/filesystem-test.yaml
+oc create -f rook/deploy/examples/filesystem-test.yaml
 echo "Exit from filesystem-test.yaml $?"
-oc create -f rook/cluster/examples/kubernetes/ceph/csi/cephfs/storageclass.yaml
-sed -i "s/rook-cephfs/csi-cephfs/g" rook/cluster/examples/kubernetes/ceph/csi/cephfs/storageclass.yaml
-oc create -f rook/cluster/examples/kubernetes/ceph/csi/cephfs/storageclass.yaml
+oc create -f rook/deploy/examples/csi/cephfs/storageclass.yaml
+sed -i "s/rook-cephfs/csi-cephfs/g" rook/deploy/examples/csi/cephfs/storageclass.yaml
+oc create -f rook/deploy/examples/csi/cephfs/storageclass.yaml
 default_storage_class=$(oc get sc  | grep -e default | cut -f1 -d' ' | tr -s ' ')
 echo "default_storage_class is $default_storage_class"
 if [[ -z $default_storage_class ]]; then
@@ -109,4 +101,4 @@ else
 fi
 echo "Set default storageclass to $new_default_sc"
 oc patch storageclass $new_default_sc -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
-oc create -f rook/cluster/examples/kubernetes/ceph/csi/rbd/storageclass-test.yaml
+oc create -f rook/deploy/examples/csi/rbd/storageclass-test.yaml
